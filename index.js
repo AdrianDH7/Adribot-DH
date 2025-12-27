@@ -212,17 +212,21 @@ setInterval(async () => {
 //sessions/jadibts
             // Función para verificar si un usuario es administrador en un grupo
             async function isAdmin(sock, chatId, sender) {
-                try {
-                    const groupMetadata = await sock.groupMetadata(chatId);
-                    const admins = groupMetadata.participants
-                        .filter(p => p.admin)
-                        .map(p => p.id);
-                    return admins.includes(sender) || isOwner(sender);
-                } catch (error) {
-                    console.error("Error verificando administrador:", error);
-                    return false;
-                }
-            }
+    try {
+        const groupMetadata = await sock.groupMetadata(chatId);
+
+        const admins = groupMetadata.participants
+            .filter(p => p.admin === 'admin' || p.admin === 'superadmin')
+            .map(p => p.id);
+
+        if (sender === sock.user.id) return true;
+
+        return admins.includes(sender) || isOwner(sender);
+    } catch (error) {
+        console.error("Error verificando administrador:", error);
+        return false;
+    }
+}
 
 // Ruta de los archivos a limpiar
 const archivosAntidelete = ['./antidelete.json', './antideletepri.json'];
