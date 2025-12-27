@@ -1292,9 +1292,22 @@ case 'tag': {
 
     // Verificar si es admin o el mismo bot
     const metadata = await sock.groupMetadata(chatId);
-    const participant = metadata.participants.find(p => p.id.includes(senderNum));
-    const isAdmin = participant?.admin === "admin" || participant?.admin === "superadmin";
-    const isBot = botNumber === senderNum;
+   const senderIds = new Set([
+  senderJid,
+  senderNum + "@s.whatsapp.net"
+]);
+
+const participant = metadata.participants.find(p =>
+  senderIds.has(p.id)
+);
+
+const isAdmin =
+  participant?.admin === "admin" ||
+  participant?.admin === "superadmin";
+
+const isBot =
+  botNumber === senderNum;
+
 
     if (!isAdmin && !isBot) {
       return await sock.sendMessage(chatId, {
