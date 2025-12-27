@@ -1277,117 +1277,161 @@ case 'ff2': {
 
     break;
 }
-case 'tag': {
+case 'n': {
   try {
     const chatId = msg.key.remoteJid;
     const senderJid = msg.key.participant || msg.key.remoteJid;
-    const senderNum = senderJid.replace(/[^0-9]/g, "");
-    const botNumber = sock.user?.id.split(":")[0].replace(/[^0-9]/g, "");
 
-    // Verificar que se use en un grupo
+    const senderNum = senderJid.replace(/[^0-9]/g, "");
+    const botNumber = sock.user?.id?.split(":")[0]?.replace(/[^0-9]/g, "");
+
+    // ─── solo grupos ───
     if (!chatId.endsWith("@g.us")) {
-      await sock.sendMessage(chatId, { text: "⚠️ Este comando solo se puede usar en grupos." }, { quoted: msg });
+      await sock.sendMessage(
+        chatId,
+        { text: "⚠️ Este comando solo se puede usar en grupos." },
+        { quoted: msg }
+      );
       return;
     }
 
-    // Verificar si es admin o el mismo bot
+    // ─── metadata ───
     const metadata = await sock.groupMetadata(chatId);
-   const senderIds = new Set([
-  senderJid,
-  senderNum + "@s.whatsapp.net"
-]);
 
-const participant = metadata.participants.find(p =>
-  senderIds.has(p.id)
-);
+    // ─── detección admin ULTRA (no falla con @lid) ───
+    const senderIds = new Set([
+      senderJid,
+      senderNum + "@s.whatsapp.net"
+    ]);
 
-const isAdmin =
-  participant?.admin === "admin" ||
-  participant?.admin === "superadmin";
+    const participant = metadata.participants.find(p =>
+      senderIds.has(p.id)
+    );
 
-const isBot =
-  botNumber === senderNum;
+    const isAdmin =
+      participant?.admin === "admin" ||
+      participant?.admin === "superadmin";
 
+    const isBot = senderNum === botNumber;
 
     if (!isAdmin && !isBot) {
-      return await sock.sendMessage(chatId, {
-        text: "❌ Solo los administradores del grupo o el bot pueden usar este comando."
-      }, { quoted: msg });
+      await sock.sendMessage(
+        chatId,
+        { text: "❌ Solo administradores pueden usar este comando." },
+        { quoted: msg }
+      );
+      return;
     }
 
+    // ─── menciones ───
     const allMentions = metadata.participants.map(p => p.id);
+
     let messageToForward = null;
     let hasMedia = false;
 
-    if (msg.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-      const quoted = msg.message.extendedTextMessage.contextInfo.quotedMessage;
+    // ─── quoted message ───
+    const quoted =
+      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 
+    if (quoted) {
       if (quoted.conversation) {
         messageToForward = { text: quoted.conversation };
+
       } else if (quoted.extendedTextMessage?.text) {
         messageToForward = { text: quoted.extendedTextMessage.text };
+
       } else if (quoted.imageMessage) {
         const stream = await downloadContentFromMessage(quoted.imageMessage, "image");
         let buffer = Buffer.alloc(0);
         for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-        const mimetype = quoted.imageMessage.mimetype || "image/jpeg";
-        const caption = quoted.imageMessage.caption || "";
-        messageToForward = { image: buffer, mimetype, caption };
+
+        messageToForward = {
+          image: buffer,
+          mimetype: quoted.imageMessage.mimetype,
+          caption: quoted.imageMessage.caption || ""
+        };
         hasMedia = true;
+
       } else if (quoted.videoMessage) {
         const stream = await downloadContentFromMessage(quoted.videoMessage, "video");
         let buffer = Buffer.alloc(0);
         for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-        const mimetype = quoted.videoMessage.mimetype || "video/mp4";
-        const caption = quoted.videoMessage.caption || "";
-        messageToForward = { video: buffer, mimetype, caption };
+
+        messageToForward = {
+          video: buffer,
+          mimetype: quoted.videoMessage.mimetype,
+          caption: quoted.videoMessage.caption || ""
+        };
         hasMedia = true;
+
       } else if (quoted.audioMessage) {
         const stream = await downloadContentFromMessage(quoted.audioMessage, "audio");
         let buffer = Buffer.alloc(0);
         for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-        const mimetype = quoted.audioMessage.mimetype || "audio/mp3";
-        messageToForward = { audio: buffer, mimetype };
+
+        messageToForward = {
+          audio: buffer,
+          mimetype: quoted.audioMessage.mimetype
+        };
         hasMedia = true;
+
       } else if (quoted.stickerMessage) {
         const stream = await downloadContentFromMessage(quoted.stickerMessage, "sticker");
         let buffer = Buffer.alloc(0);
         for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+
         messageToForward = { sticker: buffer };
         hasMedia = true;
+
       } else if (quoted.documentMessage) {
         const stream = await downloadContentFromMessage(quoted.documentMessage, "document");
         let buffer = Buffer.alloc(0);
         for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-        const mimetype = quoted.documentMessage.mimetype || "application/pdf";
-        const caption = quoted.documentMessage.caption || "";
-        messageToForward = { document: buffer, mimetype, caption };
+
+        messageToForward = {
+          document: buffer,
+          mimetype: quoted.documentMessage.mimetype,
+          caption: quoted.documentMessage.caption || ""
+        };
         hasMedia = true;
       }
     }
 
-    if (!hasMedia && args.join(" ").trim().length > 0) {
+    // ─── texto directo ───
+    if (!hasMedia && args.join(" ").trim()) {
       messageToForward = { text: args.join(" ") };
     }
 
     if (!messageToForward) {
-      await sock.sendMessage(chatId, { text: "⚠️ Debes responder a un mensaje o proporcionar un texto para reenviar." }, { quoted: msg });
+      await sock.sendMessage(
+        chatId,
+        { text: "⚠️ Responde a un mensaje o escribe un texto." },
+        { quoted: msg }
+      );
       return;
     }
 
-    await sock.sendMessage(chatId, {
-      ...messageToForward,
-      mentions: allMentions
-    }, { quoted: msg });
+    // ─── enviar ───
+    await sock.sendMessage(
+      chatId,
+      {
+        ...messageToForward,
+        mentions: allMentions
+      },
+      { quoted: msg }
+    );
 
   } catch (error) {
-    console.error("❌ Error en el comando tag:", error);
-    await sock.sendMessage(msg.key.remoteJid, {
-      text: "❌ Ocurrió un error al ejecutar el comando tag."
-    }, { quoted: msg });
+    console.error("❌ Error en el comando n:", error);
+    await sock.sendMessage(
+      msg.key.remoteJid,
+      { text: "❌ Ocurrió un error al ejecutar el comando." },
+      { quoted: msg }
+    );
   }
   break;
-}      
+}
+
 
 
 
